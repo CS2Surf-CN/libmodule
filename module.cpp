@@ -8,14 +8,13 @@
 #include <cmath>
 #include <emmintrin.h>
 
-using namespace DynLibUtils;
+using namespace libmodule;
 
 //-----------------------------------------------------------------------------
 // Purpose: constructor
 // Input  : szModuleName (without extension .dll/.so)
 //-----------------------------------------------------------------------------
-CModule::CModule(const std::string_view szModuleName) : m_pModuleHandle(nullptr)
-{
+CModule::CModule(const std::string_view szModuleName) : m_pModuleHandle(nullptr) {
 	InitFromName(szModuleName);
 }
 
@@ -23,8 +22,7 @@ CModule::CModule(const std::string_view szModuleName) : m_pModuleHandle(nullptr)
 // Purpose: constructor
 // Input  : pModuleMemory
 //-----------------------------------------------------------------------------
-CModule::CModule(const CMemory pModuleMemory) : m_pModuleHandle(nullptr)
-{
+CModule::CModule(const CMemory pModuleMemory) : m_pModuleHandle(nullptr) {
 	InitFromMemory(pModuleMemory);
 }
 
@@ -33,28 +31,22 @@ CModule::CModule(const CMemory pModuleMemory) : m_pModuleHandle(nullptr)
 // Input  : svInput
 // Output : std::pair<std::vector<uint8_t>, std::string>
 //-----------------------------------------------------------------------------
-std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const std::string_view svInput)
-{
+std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const std::string_view svInput) {
 	char* pszPatternStart = const_cast<char*>(svInput.data());
 	char* pszPatternEnd = pszPatternStart + svInput.size();
 	std::vector<uint8_t> vBytes;
 	std::string svMask;
 
-	for (char* pszCurrentByte = pszPatternStart; pszCurrentByte < pszPatternEnd; ++pszCurrentByte)
-	{
-		if (*pszCurrentByte == '?')
-		{
+	for (char* pszCurrentByte = pszPatternStart; pszCurrentByte < pszPatternEnd; ++pszCurrentByte) {
+		if (*pszCurrentByte == '?') {
 			++pszCurrentByte;
-			if (*pszCurrentByte == '?')
-			{
+			if (*pszCurrentByte == '?') {
 				++pszCurrentByte; // Skip double wildcard.
 			}
 
 			vBytes.push_back(0); // Push the byte back as invalid.
 			svMask += '?';
-		}
-		else
-		{
+		} else {
 			vBytes.push_back(static_cast<uint8_t>(strtoul(pszCurrentByte, &pszCurrentByte, 16)));
 			svMask += 'x';
 		}
@@ -71,12 +63,13 @@ std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const
 //          *pModuleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
-{
+CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMask, const CMemory pStartAddress,
+							 const ModuleSections_t* pModuleSection) const {
 	const uint8_t* pattern = pPattern.RCast<const uint8_t*>();
 	const ModuleSections_t* section = pModuleSection ? pModuleSection : &m_ExecutableCode;
-	if (!section->IsSectionValid())
+	if (!section->IsSectionValid()) {
 		return CMemory();
+	}
 
 	const uintptr_t nBase = section->m_pSectionBase;
 	const size_t nSize = section->m_nSectionSize;
@@ -85,11 +78,11 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 	const uint8_t* pData = reinterpret_cast<uint8_t*>(nBase);
 	const uint8_t* pEnd = pData + nSize - nMaskLen;
 
-	if(pStartAddress)
-	{
+	if (pStartAddress) {
 		const uint8_t* startAddress = pStartAddress.RCast<uint8_t*>();
-		if(pData > startAddress || startAddress > pEnd)
+		if (pData > startAddress || startAddress > pEnd) {
 			return CMemory();
+		}
 
 		pData = startAddress;
 	}
@@ -98,12 +91,9 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 	const uint8_t iNumMasks = static_cast<uint8_t>(std::ceil(static_cast<float>(nMaskLen) / 16.f));
 
 	memset(nMasks, 0, iNumMasks * sizeof(int));
-	for (uint8_t i = 0; i < iNumMasks; ++i)
-	{
-		for (int8_t j = static_cast<int8_t>(std::min<size_t>(nMaskLen - i * 16, 16)) - 1; j >= 0; --j)
-		{
-			if (szMask[i * 16 + j] == 'x')
-			{
+	for (uint8_t i = 0; i < iNumMasks; ++i) {
+		for (int8_t j = static_cast<int8_t>(std::min<size_t>(nMaskLen - i * 16, 16)) - 1; j >= 0; --j) {
+			if (szMask[i * 16 + j] == 'x') {
 				nMasks[i] |= 1 << j;
 			}
 		}
@@ -111,27 +101,24 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 
 	const __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pattern));
 	__m128i xmm2, xmm3, msks;
-	for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA))
-	{
+	for (; pData != pEnd; _mm_prefetch(reinterpret_cast<const char*>(++pData + 64), _MM_HINT_NTA)) {
 		xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pData));
 		msks = _mm_cmpeq_epi8(xmm1, xmm2);
-		if ((_mm_movemask_epi8(msks) & nMasks[0]) == nMasks[0])
-		{
+		if ((_mm_movemask_epi8(msks) & nMasks[0]) == nMasks[0]) {
 			bool bFound = true;
-			for (uint8_t i = 1; i < iNumMasks; ++i)
-			{
+			for (uint8_t i = 1; i < iNumMasks; ++i) {
 				xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pData + i * 16)));
 				xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>((pattern + i * 16)));
 				msks = _mm_cmpeq_epi8(xmm2, xmm3);
-				if ((_mm_movemask_epi8(msks) & nMasks[i]) != nMasks[i])
-				{
+				if ((_mm_movemask_epi8(msks) & nMasks[i]) != nMasks[i]) {
 					bFound = false;
 					break;
 				}
 			}
 
-			if (bFound)
+			if (bFound) {
 				return pData;
+			}
 		}
 	}
 
@@ -145,8 +132,7 @@ CMemory CModule::FindPattern(const CMemory pPattern, const std::string_view szMa
 //          *pModuleSection
 // Output : CMemory
 //-----------------------------------------------------------------------------
-CMemory CModule::FindPattern(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const
-{
+CMemory CModule::FindPattern(const std::string_view svPattern, const CMemory pStartAddress, const ModuleSections_t* pModuleSection) const {
 	const std::pair patternInfo = PatternToMaskedBytes(svPattern);
 	return FindPattern(patternInfo.first.data(), patternInfo.second, pStartAddress, pModuleSection);
 }
@@ -156,12 +142,11 @@ CMemory CModule::FindPattern(const std::string_view svPattern, const CMemory pSt
 // Input  : svModuleName
 // Output : ModuleSections_t
 //-----------------------------------------------------------------------------
-CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSectionName) const
-{
-	for (const ModuleSections_t& section : m_vModuleSections)
-	{
-		if (section.m_svSectionName == svSectionName)
+CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSectionName) const {
+	for (const ModuleSections_t& section : m_vModuleSections) {
+		if (section.m_svSectionName == svSectionName) {
 			return section;
+		}
 	}
 
 	return ModuleSections_t();
@@ -170,34 +155,21 @@ CModule::ModuleSections_t CModule::GetSectionByName(const std::string_view svSec
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module handle
 //-----------------------------------------------------------------------------
-void* CModule::GetModuleHandle() const noexcept
-{
+void* CModule::GetModuleAddress() const noexcept {
 	return m_pModuleHandle;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module path
 //-----------------------------------------------------------------------------
-std::string_view CModule::GetModulePath() const
-{
+std::string_view CModule::GetModulePath() const {
 	return m_sModulePath;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the module name
 //-----------------------------------------------------------------------------
-std::string_view CModule::GetModuleName() const
-{
+std::string_view CModule::GetModuleName() const {
 	std::string_view svModulePath(m_sModulePath);
 	return svModulePath.substr(svModulePath.find_last_of("/\\") + 1);
 }
-
-#ifndef DYNLIBUTILS_SEPARATE_SOURCE_FILES
-	#if defined _WIN32 && _M_X64
-		#include "module_windows.cpp"
-	#elif defined __linux__ && __x86_64__
-		#include "module_linux.cpp"
-	#else
-		#error "Unsupported platform"
-	#endif
-#endif

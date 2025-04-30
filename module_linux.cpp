@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
-using namespace DynLibUtils;
+using namespace libmodule;
 
 CModule::~CModule()
 {
