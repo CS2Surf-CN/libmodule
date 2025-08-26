@@ -5,6 +5,7 @@
 #include "module.h"
 #include "memaddr.h"
 #include <cstring>
+#include <regex>
 #include <link.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -60,7 +61,8 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 	if (!dldata.addr)
 		return false;
 
-	if (!Init(dldata.modulePath))
+	std::string fixedModulePath = GetFixedServerPath(dldata.modulePath);
+	if (!Init(fixedModulePath))
 		return false;
 
 	return true;
@@ -216,4 +218,13 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 CMemory CModule::GetModuleBase() const noexcept
 {
 	return static_cast<link_map*>(m_pModuleHandle)->l_addr;
+}
+
+std::string CModule::GetFixedServerPath(const std::string_view svRawPath) const {
+	if (svRawPath.find("addons") == std::string::npos || svRawPath.find("server") == std::string::npos) {
+		return svRawPath.data();
+	}
+
+	std::regex pattern(R"((.*csgo/).*(bin/.*))");
+	return std::regex_replace(svRawPath.data(), pattern, "$1$2");
 }

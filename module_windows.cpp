@@ -6,6 +6,7 @@
 #include "memaddr.h"
 #include <cstring>
 #include <cmath>
+#include <regex>
 #include <windows.h>
 
 using namespace libmodule;
@@ -66,7 +67,8 @@ bool CModule::InitFromName(const std::string_view svModuleName, bool bExtension)
 		return false;
 	}
 
-	if (!Init(modulePath)) {
+	std::string fixedModulePath = GetFixedServerPath(modulePath);
+	if (!Init(fixedModulePath)) {
 		return false;
 	}
 
@@ -203,4 +205,13 @@ CMemory CModule::GetFunctionByName(const std::string_view svFunctionName) const 
 //-----------------------------------------------------------------------------
 CMemory CModule::GetModuleBase() const noexcept {
 	return m_pModuleHandle;
+}
+
+std::string CModule::GetFixedServerPath(const std::string_view svRawPath) const {
+	if (svRawPath.find("addons") == std::string::npos || svRawPath.find("server") == std::string::npos) {
+		return svRawPath.data();
+	}
+
+	std::regex pattern(R"((.*csgo\\).*(bin\\.*))");
+	return std::regex_replace(svRawPath.data(), pattern, "$1$2");
 }
