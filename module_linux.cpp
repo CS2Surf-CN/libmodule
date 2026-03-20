@@ -165,13 +165,19 @@ CMemory CModule::GetVirtualTableByName(const std::string_view svTableName, bool 
 	std::string sDecoratedTableName(bDecorated ? svTableName : std::to_string(svTableName.length()) + std::string(svTableName));
 	std::string sMask(sDecoratedTableName.length() + 1, 'x');
 
-	CMemory typeInfoName = FindPattern(sDecoratedTableName.data(), sMask, nullptr, &readOnlyData);
-	if (!typeInfoName)
-		return CMemory();
+	CMemory pStartAddr {};
+	CMemory typeInfoName, referenceTypeName {};
+	do {
+		typeInfoName = FindPattern(sDecoratedTableName.data(), sMask, pStartAddr, &readOnlyData);
+		if (!typeInfoName)
+			return CMemory();
 
-	CMemory referenceTypeName = FindPattern(&typeInfoName, "xxxxxxxx", nullptr, &readOnlyRelocations); // Get reference to type name.
-	if (!referenceTypeName)
-		return CMemory();
+		referenceTypeName = FindPattern(&typeInfoName, "xxxxxxxx", nullptr, &readOnlyRelocations); // Get reference to type name.
+		if (referenceTypeName)
+			break;
+
+		pStartAddr = typeInfoName.Offset(sDecoratedTableName.length());
+	} while (typeInfoName);
 
 	CMemory typeInfo = referenceTypeName.Offset(-0x8); // Offset -0x8 to typeinfo.
 
